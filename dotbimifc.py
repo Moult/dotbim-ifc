@@ -52,7 +52,9 @@ class Ifc2Dotbim:
 
             rotation = dotbimpy.Rotation(qx=float(qx), qy=float(qy), qz=float(qz), qw=float(qw))
             vector = dotbimpy.Vector(x=m[9], y=m[10], z=m[11])
-            info = {str(k): str(v) for k, v in element.get_info().items()}
+            info = {
+                str(k): str(v) for k, v in element.get_info().items() if not isinstance(v, ifcopenshell.entity_instance)
+            }
 
             for pset, properties in ifcopenshell.util.element.get_psets(element).items():
                 for prop, value in properties.items():
