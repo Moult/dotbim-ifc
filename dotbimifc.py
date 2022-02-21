@@ -185,7 +185,7 @@ class Dotbim2Ifc:
 
             # IFC stores colours per mesh. Dotbim stores colours per element.
             rgba = (dotbim_element.color.r, dotbim_element.color.g, dotbim_element.color.b, dotbim_element.color.a)
-            rgba_key = ",".join(rgba)
+            rgba_key = ",".join([str(v) for v in rgba])
 
             self.mesh_colors.setdefault(dotbim_element.mesh_id, {})
             mesh_rgba = self.mesh_colors[dotbim_element.mesh_id]
@@ -195,7 +195,8 @@ class Dotbim2Ifc:
             elif rgba_key in mesh_rgba:
                 representation = mesh_rgba[rgba_key]
             else:
-                representation = ifcopenshell.util.element.copy_deep(self.file, representation)
+                representation = ifcopenshell.util.element.copy(self.file, representation)
+                representation.Items = [ifcopenshell.util.element.copy_deep(self.file, representation.Items[0])]
                 self.assign_rgba(representation, rgba)
                 self.mesh_colors[dotbim_element.mesh_id][rgba_key] = representation
 
