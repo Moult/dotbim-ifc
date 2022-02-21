@@ -190,7 +190,7 @@ class Dotbim2Ifc:
                 self.mesh_colors[dotbim_element.mesh_id] = rgba
             elif mesh_rgba != rgba:
                 representation = ifcopenshell.util.element.copy_deep(self.file, representation)
-                self.change_rgba(representation, rgba)
+                self.assign_rgba(representation, rgba)
 
             element.Representation = self.file.createIfcProductDefinitionShape(Representations=[representation])
 
@@ -237,14 +237,6 @@ class Dotbim2Ifc:
         )
         ifcopenshell.api.run(
             "style.assign_representation_styles", self.file, shape_representation=representation, styles=[style]
-        )
-
-    def change_rgba(self, representation, rgba):
-        ifcopenshell.api.run(
-            "style.edit_surface_style",
-            self.file,
-            style=representation.Items[0].StyleByItem[0].Styles[0].Styles[0],
-            attributes=self.get_rgba_attributes(rgba),
         )
 
     def get_rgba_attributes(self, rgba):
