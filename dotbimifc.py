@@ -263,7 +263,4 @@ class Dotbim2Ifc:
         }
 
 
-ifc = ifcopenshell.open("Examples/171210TrainingStructure_brep.ifc")
-ifc2dotbim = Ifc2Dotbim(ifc)
-ifc2dotbim.execute()
-ifc2dotbim.write("TestStructure.bim")
+
