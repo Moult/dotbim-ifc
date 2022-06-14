@@ -1,5 +1,3 @@
-import re
-import math
 import uuid
 import numpy
 import dotbimpy
@@ -26,6 +24,9 @@ class Ifc2Dotbim:
         if not iterator.initialize():
             return
 
+        mesh_name_dictionary = {}
+        current_mesh_id = 0
+
         while True:
             shape = iterator.get()
             element = self.file.by_guid(shape.guid)
@@ -35,9 +36,13 @@ class Ifc2Dotbim:
                 continue
 
             mesh_name = shape.geometry.id
+            if mesh_name not in mesh_name_dictionary:
+                mesh_name_dictionary[mesh_name] = current_mesh_id
+                current_mesh_id += 1
+
             mesh = self.meshes.get(mesh_name)
             if mesh is None:
-                mesh = self.create_mesh(mesh_name, element, shape)
+                mesh = self.create_mesh(mesh_name, shape, mesh_name_dictionary[mesh_name])
 
             rgba = self.mesh_colors.get(mesh_name, [255, 255, 255, 255])
             color = dotbimpy.Color(r=rgba[0], g=rgba[1], b=rgba[2], a=rgba[3])
@@ -68,7 +73,7 @@ class Ifc2Dotbim:
 
             self.elements.append(
                 dotbimpy.Element(
-                    mesh_id=mesh_name,
+                    mesh_id=mesh_name_dictionary[mesh_name],
                     vector=vector,
                     guid=str(uuid.UUID(ifcopenshell.guid.expand(element.GlobalId))),
                     info=info,
@@ -110,7 +115,7 @@ class Ifc2Dotbim:
         if self.body_contexts:
             self.settings.set_context_ids(self.body_contexts)
 
-    def create_mesh(self, name, element, shape):
+    def create_mesh(self, name, shape, mesh_id):
         faces = shape.geometry.faces
         verts = shape.geometry.verts
         materials = shape.geometry.materials
@@ -138,7 +143,7 @@ class Ifc2Dotbim:
             most_popular_material = list(reversed(sorted(flattened_contest, key=lambda x: x[1])))[0][0]
             self.mesh_colors[name] = material_rgbas[most_popular_material]
 
-        mesh = dotbimpy.Mesh(mesh_id=name, coordinates=list(verts), indices=list(faces))
+        mesh = dotbimpy.Mesh(mesh_id=mesh_id, coordinates=list(verts), indices=list(faces))
         self.meshes[name] = mesh
         return mesh
 
@@ -256,3 +261,6 @@ class Dotbim2Ifc:
             },
             "Transparency": 1 - (rgba[3] / 255),
         }
+
+
+
