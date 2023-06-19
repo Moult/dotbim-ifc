@@ -24,6 +24,14 @@ ifc2dotbim.execute()
 ifc2dotbim.write("foobar.bim")
 ```
 
+## Alternative solution
 
+Another approach could be to use another open-source project, which is https://3dviewer.net/.
 
+On this website you can easily drag and drop .ifc file and export it to .bim.
 
+The conversion in the viewer has been made with the help of web-ifc ifc.js (https://github.com/IFCjs/web-ifc).
+
+This Python script however use ifcopenshell (https://github.com/IfcOpenShell/IfcOpenShell) for conversion.
+
+Depending on a various factors such as your .ifc file, or how well each library can handle it, you can find different results.
