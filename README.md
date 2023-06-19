@@ -2,11 +2,11 @@
 
 ## Purpose
 
-Converts to and from IFC and dotbim.
+Converts IFC to dotbim.
 
 ## Prerequirements
 
-You need to install dotbimpy library (https://github.com/paireks/dotbimpy):
+You need to install dotbimpy library (version >= 0.1.0) (https://github.com/paireks/dotbimpy):
 
 ```cmd
 pip install dotbimpy
@@ -17,8 +17,6 @@ Place this folder in your project where this script is located.
 
 ## How to use it
 
-Going to ...
-
 ```python
 ifc = ifcopenshell.open("foobar.ifc")
 ifc2dotbim = Ifc2Dotbim(ifc)
@@ -26,13 +24,6 @@ ifc2dotbim.execute()
 ifc2dotbim.write("foobar.bim")
 ```
 
-Coming from ...
 
-```python
-dotbim = dotbimpy.File.read("foobar.bim")
-dotbim2ifc = Dotbim2Ifc(dotbim)
-dotbim2ifc.execute()
-dotbim2ifc.write("foobar.ifc")
-```
 
 

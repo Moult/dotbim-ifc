@@ -41,8 +41,9 @@ class Ifc2Dotbim:
                 current_mesh_id += 1
 
             mesh = self.meshes.get(mesh_name)
+            face_colors = []
             if mesh is None:
-                mesh = self.create_mesh(mesh_name, shape, mesh_name_dictionary[mesh_name])
+                face_colors = self.create_mesh(mesh_name, shape, mesh_name_dictionary[mesh_name])
 
             rgba = self.mesh_colors.get(mesh_name, [255, 255, 255, 255])
             color = dotbimpy.Color(r=rgba[0], g=rgba[1], b=rgba[2], a=rgba[3])
@@ -71,17 +72,20 @@ class Ifc2Dotbim:
                     for prop, value in properties.items():
                         info[f"{pset}-{prop}"] = str(value)
 
-            self.elements.append(
-                dotbimpy.Element(
-                    mesh_id=mesh_name_dictionary[mesh_name],
-                    vector=vector,
-                    guid=str(uuid.UUID(ifcopenshell.guid.expand(element.GlobalId))),
-                    info=info,
-                    rotation=rotation,
-                    type=element.is_a(),
-                    color=color,
-                )
+            dotbim_element = dotbimpy.Element(
+                mesh_id=mesh_name_dictionary[mesh_name],
+                vector=vector,
+                guid=str(uuid.UUID(ifcopenshell.guid.expand(element.GlobalId))),
+                info=info,
+                rotation=rotation,
+                type=element.is_a(),
+                color=color,
             )
+
+            if len(face_colors) > 0:
+                dotbim_element.face_colors = face_colors
+
+            self.elements.append(dotbim_element)
 
             if not iterator.next():
                 break
@@ -92,7 +96,7 @@ class Ifc2Dotbim:
         }
 
         self.dotbim_file = dotbimpy.File(
-            "1.0.0", meshes=list(self.meshes.values()), elements=self.elements, info=file_info
+            "1.1.0", meshes=list(self.meshes.values()), elements=self.elements, info=file_info
         )
 
     def write(self, output):
@@ -120,8 +124,8 @@ class Ifc2Dotbim:
         verts = shape.geometry.verts
         materials = shape.geometry.materials
         material_ids = shape.geometry.material_ids
+        face_colors = []
 
-        material_popularity_contest = {}
         material_rgbas = {}
         if materials:
             for material in materials:
@@ -135,132 +139,9 @@ class Ifc2Dotbim:
 
             for material_id in material_ids:
                 material_name = materials[material_id].name
-                material_popularity_contest.setdefault(material_name, 0)
-                material_popularity_contest[material_name] += 1
-
-        if material_popularity_contest:
-            flattened_contest = [(k, v) for k, v in material_popularity_contest.items()]
-            most_popular_material = list(reversed(sorted(flattened_contest, key=lambda x: x[1])))[0][0]
-            self.mesh_colors[name] = material_rgbas[most_popular_material]
+                face_colors.extend(material_rgbas[material_name])
 
         mesh = dotbimpy.Mesh(mesh_id=mesh_id, coordinates=list(verts), indices=list(faces))
         self.meshes[name] = mesh
-        return mesh
-
-
-class Dotbim2Ifc:
-    def __init__(self, dotbim):
-        self.dotbim = dotbim
-        self.file = None
-        self.meshes = {}
-        self.mesh_colors = {}
-
-    def execute(self):
-        ifcopenshell.api.run("project.create_file")
-
-        self.file = ifcopenshell.api.run("project.create_file", version="IFC4")
-        project = ifcopenshell.api.run("root.create_entity", self.file, ifc_class="IfcProject", name="Project")
-        ifcopenshell.api.run("unit.assign_unit", self.file, units=[ifcopenshell.api.run("unit.add_si_unit", self.file)])
-
-        model = ifcopenshell.api.run("context.add_context", self.file, context_type="Model")
-        self.body = ifcopenshell.api.run(
-            "context.add_context",
-            self.file,
-            context_type="Model",
-            context_identifier="Body",
-            target_view="MODEL_VIEW",
-            parent=model,
-        )
-
-        site = ifcopenshell.api.run("root.create_entity", self.file, ifc_class="IfcSite", name="Site")
-        ifcopenshell.api.run("aggregate.assign_object", self.file, product=site, relating_object=project)
-
-        for mesh in self.dotbim.meshes:
-            self.create_mesh(mesh)
-
-        for dotbim_element in self.dotbim.elements:
-            ifc_class = "IfcBuildingElementProxy"
-            name = dotbim_element.info.get("Name", dotbim_element.info.get("name", "Unnamed"))
-            element = ifcopenshell.api.run("root.create_entity", self.file, ifc_class=ifc_class, name=name)
-            ifcopenshell.api.run("spatial.assign_container", self.file, product=element, relating_structure=site)
-            pset = ifcopenshell.api.run("pset.add_pset", self.file, product=element, name="Dotbim_Info")
-            ifcopenshell.api.run("pset.edit_pset", self.file, pset=pset, properties=dotbim_element.info)
-
-            representation = self.meshes[dotbim_element.mesh_id]
-
-            # IFC stores colours per mesh. Dotbim stores colours per element.
-            rgba = (dotbim_element.color.r, dotbim_element.color.g, dotbim_element.color.b, dotbim_element.color.a)
-            rgba_key = ",".join([str(v) for v in rgba])
-
-            self.mesh_colors.setdefault(dotbim_element.mesh_id, {})
-            mesh_rgba = self.mesh_colors[dotbim_element.mesh_id]
-            if not mesh_rgba:
-                self.assign_rgba(representation, rgba)
-                self.mesh_colors[dotbim_element.mesh_id][rgba_key] = representation
-            elif rgba_key in mesh_rgba:
-                representation = mesh_rgba[rgba_key]
-            else:
-                representation = ifcopenshell.util.element.copy(self.file, representation)
-                representation.Items = [ifcopenshell.util.element.copy_deep(self.file, representation.Items[0])]
-                self.assign_rgba(representation, rgba)
-                self.mesh_colors[dotbim_element.mesh_id][rgba_key] = representation
-
-            element.Representation = self.file.createIfcProductDefinitionShape(Representations=[representation])
-
-            matrix = pyquaternion.Quaternion(
-                a=dotbim_element.rotation.qw,
-                b=dotbim_element.rotation.qx,
-                c=dotbim_element.rotation.qy,
-                d=dotbim_element.rotation.qz,
-            ).transformation_matrix
-            matrix[0][3] = dotbim_element.vector.x
-            matrix[1][3] = dotbim_element.vector.y
-            matrix[2][3] = dotbim_element.vector.z
-            ifcopenshell.api.run("geometry.edit_object_placement", self.file, product=element, matrix=matrix)
-
-    def write(self, output):
-        self.file.write(output)
-
-    def create_mesh(self, mesh):
-        verts = mesh.coordinates
-        faces = mesh.indices
-
-        grouped_verts = [[verts[i], verts[i + 1], verts[i + 2]] for i in range(0, len(verts), 3)]
-        grouped_faces = [[faces[i], faces[i + 1], faces[i + 2]] for i in range(0, len(faces), 3)]
-
-        coordinates = self.file.createIfcCartesianPointList3D(grouped_verts)
-        polygons = [self.file.createIfcIndexedPolygonalFace([v + 1 for v in gf]) for gf in grouped_faces]
-        items = [self.file.createIfcPolygonalFaceSet(coordinates, None, polygons)]
-
-        self.meshes[mesh.mesh_id] = self.file.createIfcShapeRepresentation(
-            self.body,
-            self.body.ContextIdentifier,
-            "Tessellation",
-            items,
-        )
-
-    def assign_rgba(self, representation, rgba):
-        style = ifcopenshell.api.run("style.add_style", self.file)
-        surface_style = ifcopenshell.api.run(
-            "style.add_surface_style",
-            self.file,
-            style=style,
-            ifc_class="IfcSurfaceStyleShading",
-            attributes=self.get_rgba_attributes(rgba),
-        )
-        ifcopenshell.api.run(
-            "style.assign_representation_styles", self.file, shape_representation=representation, styles=[style]
-        )
-
-    def get_rgba_attributes(self, rgba):
-        return {
-            "SurfaceColour": {
-                "Red": rgba[0] / 255,
-                "Green": rgba[1] / 255,
-                "Blue": rgba[2] / 255,
-            },
-            "Transparency": 1 - (rgba[3] / 255),
-        }
-
-
+        return face_colors
 
