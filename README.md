@@ -6,7 +6,7 @@ Converts IFC to dotbim.
 
 ## Prerequirements
 
-You need to install dotbimpy library (https://github.com/paireks/dotbimpy):
+You need to install dotbimpy library (version >= 0.1.0) (https://github.com/paireks/dotbimpy):
 
 ```cmd
 pip install dotbimpy
