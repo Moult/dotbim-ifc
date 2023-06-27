@@ -41,8 +41,9 @@ class Ifc2Dotbim:
                 current_mesh_id += 1
 
             mesh = self.meshes.get(mesh_name)
+            face_colors = []
             if mesh is None:
-                mesh = self.create_mesh(mesh_name, shape, mesh_name_dictionary[mesh_name])
+                face_colors = self.create_mesh(mesh_name, shape, mesh_name_dictionary[mesh_name])
 
             rgba = self.mesh_colors.get(mesh_name, [255, 255, 255, 255])
             color = dotbimpy.Color(r=rgba[0], g=rgba[1], b=rgba[2], a=rgba[3])
@@ -71,17 +72,20 @@ class Ifc2Dotbim:
                     for prop, value in properties.items():
                         info[f"{pset}-{prop}"] = str(value)
 
-            self.elements.append(
-                dotbimpy.Element(
-                    mesh_id=mesh_name_dictionary[mesh_name],
-                    vector=vector,
-                    guid=str(uuid.UUID(ifcopenshell.guid.expand(element.GlobalId))),
-                    info=info,
-                    rotation=rotation,
-                    type=element.is_a(),
-                    color=color,
-                )
+            dotbim_element = dotbimpy.Element(
+                mesh_id=mesh_name_dictionary[mesh_name],
+                vector=vector,
+                guid=str(uuid.UUID(ifcopenshell.guid.expand(element.GlobalId))),
+                info=info,
+                rotation=rotation,
+                type=element.is_a(),
+                color=color,
             )
+
+            if len(face_colors) > 0:
+                dotbim_element.face_colors = face_colors
+
+            self.elements.append(dotbim_element)
 
             if not iterator.next():
                 break
@@ -92,7 +96,7 @@ class Ifc2Dotbim:
         }
 
         self.dotbim_file = dotbimpy.File(
-            "1.0.0", meshes=list(self.meshes.values()), elements=self.elements, info=file_info
+            "1.1.0", meshes=list(self.meshes.values()), elements=self.elements, info=file_info
         )
 
     def write(self, output):
@@ -120,8 +124,8 @@ class Ifc2Dotbim:
         verts = shape.geometry.verts
         materials = shape.geometry.materials
         material_ids = shape.geometry.material_ids
+        face_colors = []
 
-        material_popularity_contest = {}
         material_rgbas = {}
         if materials:
             for material in materials:
@@ -135,17 +139,11 @@ class Ifc2Dotbim:
 
             for material_id in material_ids:
                 material_name = materials[material_id].name
-                material_popularity_contest.setdefault(material_name, 0)
-                material_popularity_contest[material_name] += 1
-
-        if material_popularity_contest:
-            flattened_contest = [(k, v) for k, v in material_popularity_contest.items()]
-            most_popular_material = list(reversed(sorted(flattened_contest, key=lambda x: x[1])))[0][0]
-            self.mesh_colors[name] = material_rgbas[most_popular_material]
+                face_colors.extend(material_rgbas[material_name])
 
         mesh = dotbimpy.Mesh(mesh_id=mesh_id, coordinates=list(verts), indices=list(faces))
         self.meshes[name] = mesh
-        return mesh
+        return face_colors
 
 
 class Dotbim2Ifc:
@@ -261,6 +259,3 @@ class Dotbim2Ifc:
             },
             "Transparency": 1 - (rgba[3] / 255),
         }
-
-
-
